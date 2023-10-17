@@ -28,6 +28,8 @@ class Hashids2
     @alphabet         = alphabet.freeze
 
     validate_attributes
+
+    @salt_chars       = salt.chars
     setup_alphabet
   end
 
@@ -79,8 +81,9 @@ class Hashids2
     end
 
     lottery = current_alphabet[hash_int % alphabet_length]
+
     ret = lottery.dup
-    seasoning = (lottery + salt).chars
+    seasoning = [lottery].concat(@salt_chars)
 
     numbers.each_with_index do |num, i|
       buf = seasoning + current_alphabet
