@@ -65,7 +65,7 @@ class Hashids2
   protected
 
   def internal_encode(numbers)
-    alphabet = @alphabet
+    alphabet = @alphabet.chars
     alphabet_length = alphabet.length
     length   = numbers.length
 
@@ -75,7 +75,7 @@ class Hashids2
 
     lottery = alphabet[hash_int % alphabet_length]
     ret = lottery.dup
-    seasoning = lottery + salt
+    seasoning = (lottery + salt).chars
 
     numbers.each_with_index do |num, i|
       buf = seasoning + alphabet
@@ -103,8 +103,8 @@ class Hashids2
 
     while(ret.length < min_hash_length)
       alphabet = consistent_shuffle(alphabet, alphabet)
-      ret.prepend(alphabet[half_length .. -1])
-      ret << alphabet[0, half_length]
+      ret.prepend(*alphabet[half_length .. -1])
+      ret.concat(*alphabet[0, half_length])
 
       excess = ret.length - min_hash_length
       ret = ret[excess / 2, min_hash_length] if excess > 0
@@ -142,11 +142,13 @@ class Hashids2
     ret
   end
 
+  # Keep alphabet and salt as arrays internally
   def consistent_shuffle(alphabet, salt)
-    return alphabet if salt.nil? || salt.empty?
+    chars = alphabet.dup
 
-    chars = alphabet.each_char.to_a
-    salt_ords = salt.codepoints.to_a
+    return chars if salt.nil? || salt.empty?
+
+    salt_ords = salt.map(&:ord)
     salt_length = salt_ords.length
     idx = ord_total = 0
 
@@ -159,7 +161,7 @@ class Hashids2
       idx = (idx + 1) % salt_length
     end
 
-    chars.join
+    chars
   end
 
   def hash_one_number(num, alphabet, alphabet_length)
