@@ -76,10 +76,11 @@ class Hashids2
     alphabet_length = current_alphabet.length
     length   = numbers.length
 
-    hash_int = numbers.each_with_index.sum(0) do |n, i|
-      n % (i + 100)
+    hash_int = 0
+    # We dont use the iterator#sum to avoid the extra array allocation
+    numbers.each_with_index do |n, i|
+      hash_int += n % (i + 100)
     end
-
     lottery = current_alphabet[hash_int % alphabet_length]
 
     ret = lottery.dup
