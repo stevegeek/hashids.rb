@@ -65,38 +65,37 @@ class Hashids2
   protected
 
   def internal_encode(numbers)
-    ret = ""
-
     alphabet = @alphabet
+    alphabet_length = alphabet.length
     length   = numbers.length
-    hash_int = 0
 
-    length.times do |i|
-      hash_int += (numbers[i] % (i + 100))
+    hash_int = numbers.each_with_index.sum(0) do |n, i|
+      n % (i + 100)
     end
 
-    lottery = ret = alphabet[hash_int % alphabet.length]
+    lottery = alphabet[hash_int % alphabet_length]
+    ret = lottery.dup
+    seasoning = lottery + salt
 
-    length.times do |i|
-      num = numbers[i]
-      buf = lottery + salt + alphabet
+    numbers.each_with_index do |num, i|
+      buf = seasoning + alphabet
 
-      alphabet = consistent_shuffle(alphabet, buf[0, alphabet.length])
-      last     = hash(num, alphabet)
+      alphabet = consistent_shuffle(alphabet, buf[0, alphabet_length])
+      last     = hash_one_number(num, alphabet, alphabet_length)
 
-      ret += last
+      ret << last
 
       if (i + 1) < length
         num %= (last.ord + i)
-        ret += seps[num % seps.length]
+        ret << seps[num % seps.length]
       end
     end
 
     if ret.length < min_hash_length
-      ret = guards[(hash_int + ret[0].ord) % guards.length] + ret
+      ret.prepend(guards[(hash_int + ret[0].ord) % guards.length])
 
       if ret.length < min_hash_length
-        ret += guards[(hash_int + ret[2].ord) % guards.length]
+        ret << guards[(hash_int + ret[2].ord) % guards.length]
       end
     end
 
@@ -104,7 +103,8 @@ class Hashids2
 
     while(ret.length < min_hash_length)
       alphabet = consistent_shuffle(alphabet, alphabet)
-      ret = alphabet[half_length .. -1] + ret + alphabet[0, half_length]
+      ret.prepend(alphabet[half_length .. -1])
+      ret << alphabet[0, half_length]
 
       excess = ret.length - min_hash_length
       ret = ret[excess / 2, min_hash_length] if excess > 0
@@ -162,14 +162,12 @@ class Hashids2
     chars.join
   end
 
-  def hash(input, alphabet)
-    num = input.to_i
-    len = alphabet.length
-    res   = ""
+  def hash_one_number(num, alphabet, alphabet_length)
+    res = +""
 
     begin
-      res = "#{alphabet[num % len]}#{res}"
-      num = num.div(alphabet.length)
+      res.prepend alphabet[num % alphabet_length]
+      num = num / alphabet_length
     end while num > 0
 
     res
