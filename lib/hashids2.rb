@@ -1,8 +1,8 @@
+# frozen_string_literal: true
+
 # encoding: utf-8
 
-require_relative 'hashids2'
-
-class Hashids
+class Hashids2
   VERSION = "1.0.6"
 
   MIN_ALPHABET_LENGTH = 16
