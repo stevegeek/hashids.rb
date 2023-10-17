@@ -135,7 +135,7 @@ class Hashids2
       breakdown = breakdown[1 .. -1].tr(@escaped_seps_selector, " ")
       array     = breakdown.split(" ")
 
-      seasoning = (lottery + salt).chars
+      seasoning = [lottery].concat(@salt_chars)
 
       array.length.times do |time|
         sub_hash = array[time]
@@ -153,17 +153,16 @@ class Hashids2
     ret
   end
 
-  def consistent_shuffle(collection_to_shuffle, salt)
+  def consistent_shuffle(collection_to_shuffle, shuffle_salt)
     chars = collection_to_shuffle.dup
 
-    return chars if salt.nil? || salt.empty?
+    return chars if shuffle_salt.nil? || shuffle_salt.empty?
 
-    salt_ords = salt.map(&:ord)
-    salt_length = salt_ords.length
+    salt_length = shuffle_salt.length
     idx = ord_total = 0
 
     (collection_to_shuffle.length-1).downto(1) do |i|
-      ord_total += n = salt_ords[idx]
+      ord_total += n = shuffle_salt[idx].ord
       j = (n + idx + ord_total) % i
 
       chars[i], chars[j] = chars[j], chars[i]
@@ -232,7 +231,7 @@ class Hashids2
     @alphabet.delete!(' ')
     @seps.delete!(' ')
 
-    @seps = consistent_shuffle(@seps.chars, salt.chars).join
+    @seps = consistent_shuffle(@seps.chars, @salt_chars).join
 
     if @seps.length == 0 || (@alphabet.length / @seps.length.to_f) > SEP_DIV
       seps_length = (@alphabet.length / SEP_DIV).ceil
@@ -248,7 +247,7 @@ class Hashids2
       end
     end
 
-    @alphabet = consistent_shuffle(@alphabet.chars, salt.chars)
+    @alphabet = consistent_shuffle(@alphabet.chars, @salt_chars)
   end
 
   def setup_guards
