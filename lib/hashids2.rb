@@ -58,14 +58,13 @@ class Hashids2
   end
 
   def decode_hex(hash)
-    ret = ""
     numbers = decode(hash)
 
-    numbers.length.times do |i|
-      ret += numbers[i].to_s(16)[1 .. -1]
+    ret = numbers.map do |n|
+      n.to_s(16)[1 .. -1]
     end
 
-    ret.upcase
+    ret.join.upcase
   end
 
   protected
