@@ -6,6 +6,9 @@ require "bundler/setup"
 require "benchmark/ips"
 require "benchmark/memory"
 require "hashids"
+require "memory_profiler"
+
+my_salt = "salt!"
 
 def run_check(title, &block)
   puts "\n\n# #{title}:"
@@ -16,45 +19,55 @@ def run_check(title, &block)
   Benchmark.memory(&block)
 end
 
-my_salt = "salt!"
-
-run_check("Longer alphabets are slower") do |x|
+run_check("#encode") do |x|
   coder = ::Hashids.new(my_salt)
-  # coder2 = ::Hashids.new(my_salt, 0, "1234567890abcdef")
-  coder21 = ::Hashids2.new(my_salt)
-  # coder22 = ::Hashids2.new(my_salt, 0, "1234567890abcdef")
+  coderv2 = ::Hashids2.new(my_salt)
 
   input = 100.times.map { rand(1000) }.freeze
 
-  x.report("default alphabet") { coder.encode(input) }
-  # x.report("custom shorter alphabet") { coder2.encode(input) }
-  x.report("v2 default alphabet") { coder21.encode(input) }
-  # x.report("v2 custom shorter alphabet") { coder22.encode(input) }
+  x.report("v1") { coder.encode(input) }
+  x.report("v2") { coderv2.encode(input) }
 
   x.compare!
 end
 
-#
-# run_check("Longer salts don't change much") do |x|
-#   coder = ::Hashids.new(my_salt)
-#   coder2 = ::Hashids.new("a" * 100)
-#
-#   x.report("default salt") { coder.encode([78, 45]) }
-#   x.report("longer salt") { coder2.encode([78, 45]) }
-#
-#   x.compare!
-# end
-#
-# run_check("target length") do |x|
-#   coder0 = ::Hashids.new(my_salt, 0)
-#   coder = ::Hashids.new(my_salt, 8)
-#   coder2 = ::Hashids.new(my_salt, 16)
-#   coder3 = ::Hashids.new(my_salt, 32)
-#
-#   x.report("min length") { coder0.encode([78, 45]) }
-#   x.report("length 8") { coder.encode([78, 45]) }
-#   x.report("length 16") { coder2.encode([78, 45]) }
-#   x.report("length 32") { coder3.encode([78, 45]) }
-#
-#   x.compare!
-# end
+puts "\n\n\n------ small input -------"
+
+coder = ::Hashids.new(my_salt)
+coderv2 = ::Hashids2.new(my_salt)
+input = [1]
+
+report = MemoryProfiler.report do
+  coder.encode(input)
+end
+
+report.pretty_print
+
+puts "-------------"
+report = MemoryProfiler.report do
+  coderv2.encode(input)
+end
+
+report.pretty_print
+
+puts "\n\n\n------large input -------"
+
+input = 100.times.map { rand(1000) }.freeze
+
+report = MemoryProfiler.report do
+  coder.encode(input)
+end
+
+report.pretty_print
+
+puts "-------------"
+report = MemoryProfiler.report do
+  coderv2.encode(input)
+end
+
+report.pretty_print
+
+puts "-------------"
+
+
+

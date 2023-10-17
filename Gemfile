@@ -9,6 +9,7 @@ group :development do
   gem "rake"
   gem "benchmark-ips"
   gem "benchmark-memory"
+  gem "memory_profiler"
   gem "fuzzbert"
 end
 
