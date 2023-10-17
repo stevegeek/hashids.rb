@@ -4,7 +4,12 @@ source 'https://rubygems.org'
 gemspec
 
 group :development do
+  gem "rbs"
+  gem "steep"
   gem "rake"
+  gem "benchmark-ips"
+  gem "benchmark-memory"
+  gem "fuzzbert"
 end
 
 group :test do
