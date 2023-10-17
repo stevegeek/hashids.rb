@@ -9,19 +9,20 @@ class Hashids2
   SEP_DIV             = 3.5
   GUARD_DIV           = 12.0
 
-  DEFAULT_SEPS        = "cfhistuCFHISTU"
+  DEFAULT_SEPS        = "cfhistuCFHISTU".freeze
 
-  DEFAULT_ALPHABET    = "abcdefghijklmnopqrstuvwxyz" +
+  DEFAULT_ALPHABET    = ("abcdefghijklmnopqrstuvwxyz" +
                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-                        "1234567890"
+                        "1234567890").freeze
 
   attr_reader :salt, :min_hash_length, :alphabet, :seps, :guards
 
   def initialize(salt = "", min_hash_length = 0, alphabet = DEFAULT_ALPHABET)
     @salt             = salt
     @min_hash_length  = min_hash_length
-    @alphabet         = alphabet
+    @alphabet         = alphabet.freeze
 
+    validate_attributes
     setup_alphabet
   end
 
@@ -192,9 +193,7 @@ class Hashids2
   private
 
   def setup_alphabet
-    validate_attributes
-
-    @alphabet = String.new(uniq_characters(alphabet))
+    @alphabet = uniq_characters(alphabet)
 
     validate_alphabet
 
@@ -206,7 +205,7 @@ class Hashids2
   end
 
   def setup_seps
-    @seps = String.new(DEFAULT_SEPS)
+    @seps = DEFAULT_SEPS.dup
 
     seps.length.times do |i|
       # Seps should only contain characters present in alphabet,
