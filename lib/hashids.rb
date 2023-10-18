@@ -114,14 +114,14 @@ class Hashids
   def internal_decode(hash, alphabet)
     ret = []
 
-    breakdown = hash.tr(@guards, " ")
+    breakdown = hash.tr(@escaped_guards_selector, " ")
     array     = breakdown.split(" ")
 
     i = [3,2].include?(array.length) ? 1 : 0
 
     if breakdown = array[i]
       lottery   = breakdown[0]
-      breakdown = breakdown[1 .. -1].tr(@seps, " ")
+      breakdown = breakdown[1 .. -1].tr(@escaped_seps_selector, " ")
       array     = breakdown.split(" ")
 
       array.length.times do |time|
@@ -198,6 +198,9 @@ class Hashids
 
     setup_seps
     setup_guards
+
+    @escaped_guards_selector = @guards.gsub(/([-\\^])/) { "\\#{$1}" }
+    @escaped_seps_selector = @seps.gsub(/([-\\^])/) { "\\#{$1}" }
   end
 
   def setup_seps
