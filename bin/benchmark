@@ -19,6 +19,13 @@ def run_check(title, &block)
   Benchmark.memory(&block)
 end
 
+run_check(".new") do |x|
+  x.report("v1") { ::Hashids.new(my_salt) }
+  x.report("v2") { ::Hashids2.new(my_salt) }
+
+  x.compare!
+end
+
 run_check("#encode") do |x|
   coder = ::Hashids.new(my_salt)
   coderv2 = ::Hashids2.new(my_salt)
@@ -31,7 +38,41 @@ run_check("#encode") do |x|
   x.compare!
 end
 
-puts "\n\n\n------ small input -------"
+run_check("#decode") do |x|
+  coder = ::Hashids.new(my_salt)
+  coderv2 = ::Hashids2.new(my_salt)
+
+  input = coderv2.encode(rand(1000))
+
+  x.report("v1") { coder.decode(input) }
+  x.report("v2") { coderv2.decode(input) }
+
+  x.compare!
+end
+
+run_check("#encode_hex") do |x|
+  coder = ::Hashids.new(my_salt)
+  coderv2 = ::Hashids2.new(my_salt)
+
+  input = rand(1000).to_s(16)
+
+  x.report("v1") { coder.encode_hex(input) }
+  x.report("v2") { coderv2.encode_hex(input) }
+
+  x.compare!
+end
+
+run_check("#decode_hex") do |x|
+  coder = ::Hashids.new(my_salt)
+  coderv2 = ::Hashids2.new(my_salt)
+
+  input = coderv2.encode_hex(rand(1000).to_s(16))
+
+  x.report("v1") { coder.decode_hex(input) }
+  x.report("v2") { coderv2.decode_hex(input) }
+
+  x.compare!
+end
 
 coder = ::Hashids.new(my_salt)
 coderv2 = ::Hashids2.new(my_salt)
