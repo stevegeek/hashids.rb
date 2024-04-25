@@ -159,7 +159,8 @@ class Hashids2
 
     idx = ord_total = 0
 
-    (collection_to_shuffle.length-1).downto(1) do |i|
+    i = collection_to_shuffle.length-1
+    while i >= 1
       raise ArgumentError, "Salt is too short in shuffle" if idx >= salt_part_1_length && salt_part_2.nil?
       ord_total += n = (idx >= salt_part_1_length ? salt_part_2[idx - salt_part_1_length] : salt_part_1[idx]).ord
       j = (n + idx + ord_total) % i
@@ -167,6 +168,7 @@ class Hashids2
       chars[i], chars[j] = chars[j], chars[i]
 
       idx = (idx + 1) % max_salt_length
+      i -= 1
     end
 
     chars
