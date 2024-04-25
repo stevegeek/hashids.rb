@@ -165,7 +165,9 @@ class Hashids2
       ord_total += n = (idx >= salt_part_1_length ? salt_part_2[idx - salt_part_1_length] : salt_part_1[idx]).ord
       j = (n + idx + ord_total) % i
 
-      chars[i], chars[j] = chars[j], chars[i]
+      tmp = chars[i]
+      chars[i] = chars[j]
+      chars[j] = tmp
 
       idx = (idx + 1) % max_salt_length
       i -= 1
