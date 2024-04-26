@@ -2,7 +2,7 @@
 
 # encoding: utf-8
 
-class Hashids2
+class Hashids3
   MIN_ALPHABET_LENGTH = 16
   SEP_DIV             = 3.5
   GUARD_DIV           = 12.0
@@ -15,6 +15,7 @@ class Hashids2
 
   attr_reader :salt, :min_hash_length, :seps, :guards
 
+  # FIXME: @alphabet is now an array internally, we should probably move Alphabet to a class
   def alphabet
     @alphabet.join
   end
@@ -28,6 +29,11 @@ class Hashids2
 
     @salt_chars       = salt.chars
     setup_alphabet
+
+    @alphabet_ord = @alphabet.map(&:ord)
+    @salt_chars_ord = @salt_chars.map(&:ord)
+    @seps_ord = @seps.map(&:ord)
+    @guards_ord = @guards.map(&:ord)
   end
 
   def encode(*numbers)
@@ -68,8 +74,9 @@ class Hashids2
 
   protected
 
+
   def internal_encode(numbers)
-    current_alphabet = @alphabet
+    current_alphabet = @alphabet_ord
     alphabet_length = current_alphabet.length
     length   = numbers.length
 
@@ -80,26 +87,26 @@ class Hashids2
     end
     lottery = current_alphabet[hash_int % alphabet_length]
 
-    ret = lottery.dup
-    seasoning = [lottery].concat(@salt_chars)
+    ret = [lottery]
+    seasoning = ret.dup.concat(@salt_chars_ord)
 
     numbers.each_with_index do |num, i|
       current_alphabet = consistent_shuffle(current_alphabet, seasoning, current_alphabet, alphabet_length)
       last     = hash_one_number(num, current_alphabet, alphabet_length)
 
-      ret << last
+      ret.concat(last)
 
       if (i + 1) < length
-        num %= (last.ord + i)
-        ret << seps[num % seps.length]
+        num %= (last[0] + i)
+        ret << @seps_ord[num % @seps_ord.length]
       end
     end
 
     if ret.length < min_hash_length
-      ret.prepend(guards[(hash_int + ret[0].ord) % guards.length])
+      ret.prepend(@guards_ord[(hash_int + ret[0]) % @guards_ord.length])
 
       if ret.length < min_hash_length
-        ret << guards[(hash_int + ret[2].ord) % guards.length]
+        ret << @guards_ord[(hash_int + ret[2]) % @guards_ord.length]
       end
     end
 
@@ -108,13 +115,13 @@ class Hashids2
     while(ret.length < min_hash_length)
       current_alphabet = consistent_shuffle(current_alphabet, current_alphabet, nil, current_alphabet.length)
       ret.prepend(*current_alphabet[half_length .. -1])
-      ret.concat(*current_alphabet[0, half_length])
+      ret.concat(current_alphabet[0, half_length])
 
       excess = ret.length - min_hash_length
       ret = ret[excess / 2, min_hash_length] if excess > 0
     end
 
-    ret
+    ret.pack('C*')
   end
 
   def internal_decode(hash, alphabet)
@@ -134,7 +141,7 @@ class Hashids2
 
       array.length.times do |time|
         sub_hash = array[time]
-        alphabet = consistent_shuffle(alphabet, seasoning, alphabet, alphabet.length)
+        alphabet = consistent_shuffle_strings(alphabet, seasoning, alphabet, alphabet.length)
 
         ret.push unhash(sub_hash, alphabet)
       end
@@ -147,7 +154,7 @@ class Hashids2
     ret
   end
 
-  def consistent_shuffle(collection_to_shuffle, salt_part_1, salt_part_2, max_salt_length)
+  def consistent_shuffle_strings(collection_to_shuffle, salt_part_1, salt_part_2, max_salt_length)
     salt_part_1_length = salt_part_1.length
 
     return collection_to_shuffle if collection_to_shuffle.empty? || max_salt_length == 0 || salt_part_1.nil? || salt_part_1_length == 0
@@ -162,6 +169,33 @@ class Hashids2
       ord_total += n = (idx >= salt_part_1_length ? salt_part_2[idx - salt_part_1_length] : salt_part_1[idx]).ord
       j = (n + idx + ord_total) % i
 
+      chars[i], chars[j] = chars[j], chars[i]
+
+      idx = (idx + 1) % max_salt_length
+      i -= 1
+    end
+
+    chars
+  end
+
+  # crystalize [collection_to_shuffle: json{ Array(Int64)  }, salt_part_1: json{ Array(Int64)  }, salt_part_2: json{ Array(Int64) | Nil  }, max_salt_length: :int64] => json{ Array(Int64)  }
+  def consistent_shuffle(collection_to_shuffle, salt_part_1, salt_part_2, max_salt_length)
+    salt_part_1_length = salt_part_1.length
+
+    return collection_to_shuffle if collection_to_shuffle.empty? || max_salt_length == 0 || salt_part_1.nil? || salt_part_1_length == 0
+
+    chars = collection_to_shuffle.dup
+
+    idx = ord_total = 0
+
+    i = collection_to_shuffle.length - 1
+    while i >= 1
+      raise ArgumentError, "Salt is too short in shuffle" if idx >= salt_part_1_length && salt_part_2.nil?
+      char = idx >= salt_part_1_length ? salt_part_2[idx - salt_part_1_length] : salt_part_1[idx]
+      n = char # .ord
+      ord_total += n
+      j = (n + idx + ord_total) % i
+
       tmp = chars[i]
       chars[i] = chars[j]
       chars[j] = tmp
@@ -173,8 +207,9 @@ class Hashids2
     chars
   end
 
+
   def hash_one_number(num, alphabet, alphabet_length)
-    res = +""
+    res = []
 
     begin
       res.prepend alphabet[num % alphabet_length]
@@ -232,7 +267,7 @@ class Hashids2
     @seps.delete!(' ')
 
     chars = @seps.chars
-    @seps = consistent_shuffle(chars, @salt_chars, nil, @salt_chars.length).join
+    @seps = consistent_shuffle_strings(chars, @salt_chars, nil, @salt_chars.length).join
 
     if @seps.length == 0 || (@alphabet.length / @seps.length.to_f) > SEP_DIV
       seps_length = (@alphabet.length / SEP_DIV).ceil
@@ -249,7 +284,7 @@ class Hashids2
     end
 
     chars = @alphabet.chars
-    @alphabet = consistent_shuffle(chars, @salt_chars, nil, @salt_chars.length)
+    @alphabet = consistent_shuffle_strings(chars, @salt_chars, nil, @salt_chars.length)
   end
 
   def setup_guards

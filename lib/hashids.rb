@@ -1,10 +1,11 @@
 # encoding: utf-8
 
+# require "crystalruby"
 require_relative 'hashids2'
+require_relative 'hashids3'
+require_relative "hashids/version"
 
 class Hashids
-  VERSION = "1.0.6"
-
   MIN_ALPHABET_LENGTH = 16
   SEP_DIV             = 3.5
   GUARD_DIV           = 12.0
