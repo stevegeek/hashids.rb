@@ -1,28 +1,32 @@
+# frozen_string_literal: true
+
 # encoding: utf-8
 
-# require "crystalruby"
-require_relative 'hashids2'
-require_relative 'hashids3'
-require_relative "hashids/version"
-
-class Hashids
+class Hashids2
   MIN_ALPHABET_LENGTH = 16
   SEP_DIV             = 3.5
   GUARD_DIV           = 12.0
 
-  DEFAULT_SEPS        = "cfhistuCFHISTU"
+  DEFAULT_SEPS        = "cfhistuCFHISTU".freeze
 
-  DEFAULT_ALPHABET    = "abcdefghijklmnopqrstuvwxyz" +
+  DEFAULT_ALPHABET    = ("abcdefghijklmnopqrstuvwxyz" +
                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-                        "1234567890"
+                        "1234567890").freeze
 
-  attr_reader :salt, :min_hash_length, :alphabet, :seps, :guards
+  attr_reader :salt, :min_hash_length, :seps, :guards
+
+  def alphabet
+    @alphabet.join
+  end
 
   def initialize(salt = "", min_hash_length = 0, alphabet = DEFAULT_ALPHABET)
     @salt             = salt
     @min_hash_length  = min_hash_length
-    @alphabet         = alphabet
+    @alphabet         = alphabet.freeze
 
+    validate_attributes
+
+    @salt_chars       = salt.chars
     setup_alphabet
   end
 
@@ -53,59 +57,58 @@ class Hashids
   end
 
   def decode_hex(hash)
-    ret = ""
     numbers = decode(hash)
 
-    numbers.length.times do |i|
-      ret += numbers[i].to_s(16)[1 .. -1]
+    ret = numbers.map do |n|
+      n.to_s(16)[1 .. -1]
     end
 
-    ret.upcase
+    ret.join.upcase
   end
 
   protected
 
   def internal_encode(numbers)
-    ret = ""
-
-    alphabet = @alphabet
+    current_alphabet = @alphabet
+    alphabet_length = current_alphabet.length
     length   = numbers.length
+
     hash_int = 0
-
-    length.times do |i|
-      hash_int += (numbers[i] % (i + 100))
+    # We dont use the iterator#sum to avoid the extra array allocation
+    numbers.each_with_index do |n, i|
+      hash_int += n % (i + 100)
     end
+    lottery = current_alphabet[hash_int % alphabet_length]
 
-    lottery = ret = alphabet[hash_int % alphabet.length]
+    ret = lottery.dup
+    seasoning = [lottery].concat(@salt_chars)
 
-    length.times do |i|
-      num = numbers[i]
-      buf = lottery + salt + alphabet
+    numbers.each_with_index do |num, i|
+      current_alphabet = consistent_shuffle(current_alphabet, seasoning, current_alphabet, alphabet_length)
+      last     = hash_one_number(num, current_alphabet, alphabet_length)
 
-      alphabet = consistent_shuffle(alphabet, buf[0, alphabet.length])
-      last     = hash(num, alphabet)
-
-      ret += last
+      ret << last
 
       if (i + 1) < length
         num %= (last.ord + i)
-        ret += seps[num % seps.length]
+        ret << seps[num % seps.length]
       end
     end
 
     if ret.length < min_hash_length
-      ret = guards[(hash_int + ret[0].ord) % guards.length] + ret
+      ret.prepend(guards[(hash_int + ret[0].ord) % guards.length])
 
       if ret.length < min_hash_length
-        ret += guards[(hash_int + ret[2].ord) % guards.length]
+        ret << guards[(hash_int + ret[2].ord) % guards.length]
       end
     end
 
-    half_length = alphabet.length.div(2)
+    half_length = current_alphabet.length.div(2)
 
     while(ret.length < min_hash_length)
-      alphabet = consistent_shuffle(alphabet, alphabet)
-      ret = alphabet[half_length .. -1] + ret + alphabet[0, half_length]
+      current_alphabet = consistent_shuffle(current_alphabet, current_alphabet, nil, current_alphabet.length)
+      ret.prepend(*current_alphabet[half_length .. -1])
+      ret.concat(*current_alphabet[0, half_length])
 
       excess = ret.length - min_hash_length
       ret = ret[excess / 2, min_hash_length] if excess > 0
@@ -127,10 +130,11 @@ class Hashids
       breakdown = breakdown[1 .. -1].tr(@escaped_seps_selector, " ")
       array     = breakdown.split(" ")
 
+      seasoning = [lottery].concat(@salt_chars)
+
       array.length.times do |time|
         sub_hash = array[time]
-        buffer   = lottery + salt + alphabet
-        alphabet = consistent_shuffle(alphabet, buffer[0, alphabet.length])
+        alphabet = consistent_shuffle(alphabet, seasoning, alphabet, alphabet.length)
 
         ret.push unhash(sub_hash, alphabet)
       end
@@ -143,34 +147,38 @@ class Hashids
     ret
   end
 
-  def consistent_shuffle(alphabet, salt)
-    return alphabet if salt.nil? || salt.empty?
+  def consistent_shuffle(collection_to_shuffle, salt_part_1, salt_part_2, max_salt_length)
+    salt_part_1_length = salt_part_1.length
 
-    chars = alphabet.each_char.to_a
-    salt_ords = salt.codepoints.to_a
-    salt_length = salt_ords.length
+    return collection_to_shuffle if collection_to_shuffle.empty? || max_salt_length == 0 || salt_part_1.nil? || salt_part_1_length == 0
+
+    chars = collection_to_shuffle.dup
+
     idx = ord_total = 0
 
-    (alphabet.length-1).downto(1) do |i|
-      ord_total += n = salt_ords[idx]
+    i = collection_to_shuffle.length - 1
+    while i >= 1
+      raise ArgumentError, "Salt is too short in shuffle" if idx >= salt_part_1_length && salt_part_2.nil?
+      ord_total += n = (idx >= salt_part_1_length ? salt_part_2[idx - salt_part_1_length] : salt_part_1[idx]).ord
       j = (n + idx + ord_total) % i
 
-      chars[i], chars[j] = chars[j], chars[i]
+      tmp = chars[i]
+      chars[i] = chars[j]
+      chars[j] = tmp
 
-      idx = (idx + 1) % salt_length
+      idx = (idx + 1) % max_salt_length
+      i -= 1
     end
 
-    chars.join
+    chars
   end
 
-  def hash(input, alphabet)
-    num = input.to_i
-    len = alphabet.length
-    res   = ""
+  def hash_one_number(num, alphabet, alphabet_length)
+    res = +""
 
     begin
-      res = "#{alphabet[num % len]}#{res}"
-      num = num.div(alphabet.length)
+      res.prepend alphabet[num % alphabet_length]
+      num = num / alphabet_length
     end while num > 0
 
     res
@@ -193,63 +201,66 @@ class Hashids
   private
 
   def setup_alphabet
-    validate_attributes
-
-    @alphabet = String.new(uniq_characters(alphabet))
+    @alphabet = uniq_characters(@alphabet)
 
     validate_alphabet
 
     setup_seps
     setup_guards
 
-    @escaped_guards_selector = @guards.gsub(/([-\\^])/) { "\\#{$1}" }
-    @escaped_seps_selector = @seps.gsub(/([-\\^])/) { "\\#{$1}" }
+    @seps = @seps.chars
+    @guards = @guards.is_a?(Array) ? @guards : @guards.chars
+
+    @escaped_guards_selector = @guards.join.gsub(/([-\\^])/) { "\\#{$1}" }
+    @escaped_seps_selector = @seps.join.gsub(/([-\\^])/) { "\\#{$1}" }
   end
 
   def setup_seps
-    @seps = String.new(DEFAULT_SEPS)
+    @seps = DEFAULT_SEPS.dup
 
     seps.length.times do |i|
       # Seps should only contain characters present in alphabet,
       # and alphabet should not contains seps
-      if j = alphabet.index(seps[i])
-        @alphabet = pick_characters(alphabet, j)
+      if j = @alphabet.index(seps[i])
+        @alphabet = pick_characters(@alphabet, j)
       else
         @seps = pick_characters(seps, i)
       end
     end
 
-    alphabet.delete!(' ')
-    seps.delete!(' ')
+    @alphabet.delete!(' ')
+    @seps.delete!(' ')
 
-    @seps = consistent_shuffle(seps, salt)
+    chars = @seps.chars
+    @seps = consistent_shuffle(chars, @salt_chars, nil, @salt_chars.length).join
 
-    if seps.length == 0 || (alphabet.length / seps.length.to_f) > SEP_DIV
-      seps_length = (alphabet.length / SEP_DIV).ceil
+    if @seps.length == 0 || (@alphabet.length / @seps.length.to_f) > SEP_DIV
+      seps_length = (@alphabet.length / SEP_DIV).ceil
       seps_length = 2 if seps_length == 1
 
-      if seps_length > seps.length
-        diff = seps_length - seps.length;
+      if seps_length > @seps.length
+        diff = seps_length - @seps.length;
 
-        @seps    += alphabet[0, diff]
-        @alphabet = alphabet[diff .. -1]
+        @seps    += @alphabet[0, diff]
+        @alphabet = @alphabet[diff .. -1]
       else
-        @seps = seps[0, seps_length]
+        @seps = @seps[0, seps_length]
       end
     end
 
-    @alphabet = consistent_shuffle(alphabet, salt)
+    chars = @alphabet.chars
+    @alphabet = consistent_shuffle(chars, @salt_chars, nil, @salt_chars.length)
   end
 
   def setup_guards
-    gc = (alphabet.length / GUARD_DIV).ceil
+    gc = (@alphabet.length / GUARD_DIV).ceil
 
-    if alphabet.length < 3
+    if @alphabet.length < 3
       @guards = seps[0, gc]
       @seps   = seps[gc .. -1]
     else
-      @guards   = alphabet[0, gc]
-      @alphabet = alphabet[gc .. -1]
+      @guards   = @alphabet[0, gc]
+      @alphabet = @alphabet[gc .. -1]
     end
   end
 
@@ -271,17 +282,17 @@ class Hashids
       raise MinLengthError, "The min length must be 0 or more"
     end
 
-    unless alphabet.kind_of?(String)
+    unless @alphabet.kind_of?(String)
       raise AlphabetError, "The alphabet must be a String"
     end
 
-    if alphabet.include?(' ')
+    if @alphabet.include?(' ')
       raise AlphabetError, "The alphabet can’t include spaces"
     end
   end
 
   def validate_alphabet
-    unless alphabet.length >= MIN_ALPHABET_LENGTH
+    unless @alphabet.length >= MIN_ALPHABET_LENGTH
       raise AlphabetError, "Alphabet must contain at least " +
                            "#{MIN_ALPHABET_LENGTH} unique characters."
     end
